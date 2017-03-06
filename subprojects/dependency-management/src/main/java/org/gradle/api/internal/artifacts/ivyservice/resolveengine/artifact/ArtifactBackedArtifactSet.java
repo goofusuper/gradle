@@ -17,6 +17,7 @@
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
 import org.gradle.api.Buildable;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.attributes.AttributeContainer;
@@ -25,11 +26,13 @@ import org.gradle.internal.operations.BuildOperationQueue;
 import org.gradle.internal.operations.RunnableBuildOperation;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public class ArtifactBackedArtifactSet implements ResolvedArtifactSet {
     private final AttributeContainer variant;
     private final ImmutableSet<ResolvedArtifact> artifacts;
+    private final Map<ResolvedArtifact, Throwable> artifactFailures = Maps.newConcurrentMap();
 
     private ArtifactBackedArtifactSet(AttributeContainer variant, Collection<? extends ResolvedArtifact> artifacts) {
         this.variant = variant;
@@ -47,7 +50,12 @@ public class ArtifactBackedArtifactSet implements ResolvedArtifactSet {
     }
 
     @Override
-    public void addPrepareActions(BuildOperationQueue<RunnableBuildOperation> actions, ArtifactVisitor visitor) {
+    public void addPrepareActions(BuildOperationQueue<RunnableBuildOperation> actions, final ArtifactVisitor visitor) {
+        if (visitor.requiresDownloadedArtifactFiles()) {
+            for (ResolvedArtifact artifact : artifacts) {
+                actions.add(new DownloadArtifactFile(artifact, artifactFailures));
+            }
+        }
     }
 
     @Override
@@ -65,13 +73,18 @@ public class ArtifactBackedArtifactSet implements ResolvedArtifactSet {
     @Override
     public void visit(ArtifactVisitor visitor) {
         for (ResolvedArtifact artifact : artifacts) {
-            visitor.visitArtifact(variant, artifact);
+            if (artifactFailures.containsKey(artifact)) {
+                visitor.visitFailure(artifactFailures.get(artifact));
+            } else {
+                visitor.visitArtifact(variant, artifact);
+            }
         }
     }
 
     private static class SingletonSet implements ResolvedArtifactSet {
         private final AttributeContainer variantAttributes;
         private final ResolvedArtifact artifact;
+        private final Map<ResolvedArtifact, Throwable> artifactFailures = Maps.newConcurrentMap();
 
         SingletonSet(AttributeContainer variantAttributes, ResolvedArtifact artifact) {
             this.variantAttributes = variantAttributes;
@@ -79,7 +92,10 @@ public class ArtifactBackedArtifactSet implements ResolvedArtifactSet {
         }
 
         @Override
-        public void addPrepareActions(BuildOperationQueue<RunnableBuildOperation> actions, ArtifactVisitor visitor) {
+        public void addPrepareActions(BuildOperationQueue<RunnableBuildOperation> actions, final ArtifactVisitor visitor) {
+            if (visitor.requiresDownloadedArtifactFiles()) {
+                actions.add(new DownloadArtifactFile(artifact, artifactFailures));
+            }
         }
 
         @Override
@@ -89,7 +105,11 @@ public class ArtifactBackedArtifactSet implements ResolvedArtifactSet {
 
         @Override
         public void visit(ArtifactVisitor visitor) {
-            visitor.visitArtifact(variantAttributes, artifact);
+            if (artifactFailures.containsKey(artifact)) {
+                visitor.visitFailure(artifactFailures.get(artifact));
+            } else {
+                visitor.visitArtifact(variantAttributes, artifact);
+            }
         }
 
         @Override
@@ -97,4 +117,29 @@ public class ArtifactBackedArtifactSet implements ResolvedArtifactSet {
             dest.add(((Buildable) artifact).getBuildDependencies());
         }
     }
+
+    private static class DownloadArtifactFile implements RunnableBuildOperation {
+        private final ResolvedArtifact artifact;
+        private final Map<ResolvedArtifact, Throwable> artifactFailures;
+
+        DownloadArtifactFile(ResolvedArtifact artifact, Map<ResolvedArtifact, Throwable> artifactFailures) {
+            this.artifact = artifact;
+            this.artifactFailures = artifactFailures;
+        }
+
+        @Override
+        public void run() {
+            try {
+                artifact.getFile();
+            } catch (Throwable t) {
+                artifactFailures.put(artifact, t);
+            }
+        }
+
+        @Override
+        public String getDescription() {
+            return "Resolve artifact " + artifact;
+        }
+    }
+
 }
