@@ -27,7 +27,6 @@ import org.gradle.api.internal.changedetection.changes.IncrementalTaskInputsInte
 import org.gradle.api.internal.changedetection.state.CachingFileHasher;
 import org.gradle.api.internal.file.FileOperations;
 import org.gradle.api.internal.tasks.CommandLineJavaToolChain;
-import org.gradle.api.internal.tasks.JavacCommandLineToolchain;
 import org.gradle.api.internal.tasks.SameJvmJavaToolChain;
 import org.gradle.api.internal.tasks.compile.AnnotationProcessorDetector;
 import org.gradle.api.internal.tasks.compile.CleaningJavaCompiler;
@@ -121,16 +120,12 @@ public class JavaCompile extends AbstractCompile {
      */
     @Nested
     @Incubating
-    @SuppressWarnings("deprecation")
     public JavaToolChain getToolChain() {
         if (getOptions().isFork()) {
             ForkOptions forkOptions = getOptions().getForkOptions();
             File javaHome = forkOptions.getJavaHome();
             if (javaHome != null) {
                 return new CommandLineJavaToolChain(javaHome, getJavaCompilerFactory(), getExecActionFactory(), getJvmVersionDetector());
-            }
-            if (forkOptions.getExecutable() != null) {
-                return new JavacCommandLineToolchain(getJavaCompilerFactory(), getExecActionFactory());
             }
         }
         return new SameJvmJavaToolChain(getJavaCompilerFactory(), getExecActionFactory());
