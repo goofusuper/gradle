@@ -355,9 +355,6 @@ class WorkerExecutorParallelIntegrationTest extends AbstractWorkerExecutorIntegr
             }
         """
 
-        // warm buildSrc
-        succeeds("help")
-
         blockingHttpServer.expectConcurrentExecution("task1", "task2")
 
         expect:
@@ -405,9 +402,6 @@ class WorkerExecutorParallelIntegrationTest extends AbstractWorkerExecutorIntegr
             }
         """
 
-        // warm buildSrc
-        succeeds("help")
-
         blockingHttpServer.expectConcurrentExecution("task1")
         blockingHttpServer.expectConcurrentExecution("task2")
 
@@ -435,9 +429,6 @@ class WorkerExecutorParallelIntegrationTest extends AbstractWorkerExecutorIntegr
                 dependsOn firstTask, secondTask
             }
         """
-
-        // warm buildSrc
-        succeeds("help")
 
         blockingHttpServer.expectConcurrentExecution("task1-1", "task2")
         blockingHttpServer.expectConcurrentExecution("task1-2")
